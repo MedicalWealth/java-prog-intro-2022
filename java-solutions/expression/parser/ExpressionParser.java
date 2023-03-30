@@ -27,7 +27,6 @@ public final class ExpressionParser implements TripleParser  {
             throw error("End of expression expected");
         }
 
-        // :NOTE: 2 setx
         private Operand parseBitOperation() {
             Operand leftOperand = parseAdd();
             while (true) {
