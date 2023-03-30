@@ -5,6 +5,8 @@ import expression.parser.BaseParser;
 import expression.parser.CharSource;
 import expression.parser.StringCharSource;
 
+import java.util.List;
+
 public final class ExpressionParser implements TripleParser  {
     public ExpressionParser() {
     }
@@ -20,63 +22,73 @@ public final class ExpressionParser implements TripleParser  {
         }
 
         private Operand parseExpression() throws ParseException {
-            final Operand result = parseBitOperation();
+            final Operand result = parseOperation(0);
             if (eof()) {
                 return result;
             }
-            throw new EOFException(errorChar());
+            throw new EOFException(errorChar(), source.getPos());
         }
 
-        private Operand parseBitOperation() throws ParseException {
-            Operand leftOperand = parseAdd();
+        private final List<List<String>> operations = List.of(
+            List.of("set", "clear"),
+            List.of("+", "-"),
+            List.of("*", "/")
+        );
+
+        private Operand parseOperation(int priority) throws ParseException {
+            Operand leftOperand = parseNext(priority + 1);
             while (true) {
                 skipWhitespace();
-                final String identifier = parseIdentifier();
-                if ("set".equals(identifier)) {
-                    leftOperand = new CheckedSet(leftOperand, parseAdd());
-                } else if ("clear".equals(identifier)) {
-                    leftOperand = new CheckedClear(leftOperand, parseAdd());
-                } else if (identifier.isEmpty()){
-                    return leftOperand;
-                } else {
-                    skipWhitespace();
-                    throw new BinaryOperationException(identifier, source.getPos());
+                final List<String> currentOperations = operations.get(priority);
+                boolean isValidOperation = false;
+                for (String operation: currentOperations) {
+                    if (take(operation)) {
+                        leftOperand = parseOperation(priority, leftOperand, operation);
+                        isValidOperation = true;
+                    }
                 }
-            }
-        }
-
-        private Operand parseAdd() throws ParseException {
-            Operand leftOperand = parseMult();
-            while (true) {
-                skipWhitespace();
-                if (take('+')) {
-                    leftOperand = new CheckedAdd(leftOperand, parseMult());
-                } else if (take('-')) {
-                    leftOperand = new CheckedSubtract(leftOperand, parseMult());
-                } else {
+                if (!isValidOperation) {
                     return leftOperand;
                 }
             }
         }
 
-        private Operand parseMult() throws ParseException {
-            Operand leftOperand = parsePrim();
-            while (true) {
-                skipWhitespace();
-                if (take('*')) {
-                    leftOperand = new CheckedMultiply(leftOperand, parsePrim());
-                } else if (take('/')) {
-                    leftOperand = new CheckedDivide(leftOperand, parsePrim());
-                } else {
-                    return leftOperand;
+        private Operand parseOperation(int priority, Operand leftOperand, String operation) throws ParseException {
+            switch (operation) {
+                case "+" -> leftOperand = new CheckedAdd(leftOperand, parseNext(priority + 1));
+                case "-" -> leftOperand = new CheckedSubtract(leftOperand, parseNext(priority + 1));
+                case "*" -> leftOperand = new CheckedMultiply(leftOperand, parseNext(priority + 1));
+                case "/" -> leftOperand = new CheckedDivide(leftOperand, parseNext(priority + 1));
+                case "set" -> {
+                    checkCorrectIdentifier();
+                    leftOperand = new CheckedSet(leftOperand, parseNext(priority + 1));
                 }
+                case "clear" -> {
+                    checkCorrectIdentifier();
+                    leftOperand = new CheckedClear(leftOperand, parseNext(priority + 1));
+                }
+            }
+            return leftOperand;
+        }
+
+        private void checkCorrectIdentifier() throws BinaryOperationException {
+            if (!Character.isWhitespace(ch) && (ch != '-') && (ch != '(')) {
+                throw new BinaryOperationException(String.valueOf(ch), source.getPos());
+            }
+        }
+
+        private Operand parseNext(int priority) throws ParseException {
+            if (priority == operations.size()) {
+                return parsePrim();
+            } else {
+                return parseOperation(priority);
             }
         }
 
         private Operand parsePrim() throws ParseException {
             skipWhitespace();
             if (take('(')) {
-                final Operand operand = parseBitOperation();
+                final Operand operand = parseOperation(0);
                 if (!take(')')) {
                     throw new NoBracketException(')', errorChar(), source.getPos());
                 }
@@ -89,23 +101,18 @@ public final class ExpressionParser implements TripleParser  {
                 }
             } else if (Character.isDigit(ch)) {
                 return new Const(parseConstant(false));
-            } else if (take('x')) {
-                return new Variable("x");
-            } else if (take('y')) {
-                return new Variable("y");
-            } else if (take('z')) {
-                return new Variable("z");
             } else {
                 final String identifier = parseIdentifier();
-                if ("count".equals(identifier)) {
-                    return new CheckedCount(parsePrim());
-                } else if ("pow10".equals(identifier)) {
-                    return new CheckedPow(parsePrim());
-                } else if ("log10".equals(identifier)) {
-                    return new CheckedLog(parsePrim());
-                } else {
-                    throw new PrimExpectedException(identifier.isEmpty() ? errorChar() : identifier, source.getPos());
-                }
+                return switch (identifier) {
+                    case "count" -> new CheckedCount(parsePrim());
+                    case "pow10" -> new CheckedPow(parsePrim());
+                    case "log10" -> new CheckedLog(parsePrim());
+                    case "x" -> new Variable("x");
+                    case "y" -> new Variable("y");
+                    case "z" -> new Variable("z");
+                    default ->
+                        throw new PrimExpectedException(identifier.isEmpty() ? errorChar() : identifier, source.getPos());
+                };
             }
         }
 
@@ -138,6 +145,6 @@ public final class ExpressionParser implements TripleParser  {
     }
 
     public static void main(final String... args) throws ParseException {
-        System.out.println(new ExpressionParser().parse("xset y"));
+        System.out.println(new ExpressionParser().parse("x + y + z"));
     }
 }

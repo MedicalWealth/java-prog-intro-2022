@@ -1,7 +1,7 @@
 package expression.exceptions;
 
 public class EOFException extends ParseException {
-    public EOFException(String found) {
-        super("expected end of expression, but found: " + found);
+    public EOFException(String found, int pos) {
+        super("expected end of expression, but found: " + found, pos);
     }
 }
