@@ -1,4 +1,4 @@
-# «Введение в программирование» 2022
+# «Введение в программирование» 2022 (ITMO University)
 
 [Условия домашних заданий](https://www.kgeorgiy.info/courses/prog-intro/homeworks.html)
 
